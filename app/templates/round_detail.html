@@ -2,6 +2,29 @@
 {% block title %}Round {{ round.scenario_id }} — Mystery Tournament Admin{% endblock %}
 {% block content %}
 
+<div class="panel">
+  <h2>Sync Car WiFi Passwords</h2>
+  <p style="color:var(--muted); font-size:13px;">
+    Each car got a fresh WiFi password when this round started, so an
+    earlier round's QR code can't still get someone onto a car's network
+    later. The physical car has no way to learn this on its own -- push it
+    from your own device while connected to that car's <strong>current</strong>
+    WiFi (whatever password you pushed last time, or the one flashed at
+    setup on first-ever use). Do this now, before anyone finishes.
+  </p>
+  <div style="display:flex; gap:20px; flex-wrap:wrap;">
+    {% for link in car_sync_links %}
+    <div style="flex:1; min-width:220px;">
+      <h3 style="margin-bottom:4px;">{{ link.car.label }}</h3>
+      <p style="font-size:13px; color:var(--muted);">Network: <code>{{ link.car.wifi_ssid }}</code></p>
+      <p style="font-size:13px;">New password: <code>{{ link.car.wifi_password }}</code></p>
+      <img src="data:image/png;base64,{{ link.push_qr_b64 }}" style="width:160px; height:160px;">
+      <p style="font-size:12px;"><a href="{{ link.push_url }}" target="_blank">Push link</a> (scan the code or tap this while connected to {{ link.car.wifi_ssid }})</p>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
 <div id="round-live">
   {% include "_round_live.html" %}
 </div>

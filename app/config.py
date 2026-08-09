@@ -37,6 +37,15 @@ DEFAULT_ROUND_TIMER_SECONDS = 420
 # How many correct finishers close a round and win car access.
 QUALIFYING_SLOTS = 3
 
+# Shared master secret the admin's own device presents to a car's local
+# /admin/set-password endpoint to push a freshly-rotated WiFi password (see
+# round_service.create_round's per-round rotation and
+# esp32_car_wifi/car*/car*.ino's handleSetPassword). NOT a per-player
+# session token, and never sent to game clients -- only used server-side to
+# build the "push" link/QR shown to the admin. Must match the ADMIN_KEY
+# constant flashed into all 3 cars' firmware; change this before the event.
+CAR_ADMIN_KEY = os.environ.get("CAR_ADMIN_KEY", "change-this-admin-key")
+
 # Mirrors game/story/entry/meta_flow.rpy's MT_CASE_CATALOGUE. Keep in sync by hand
 # if a scenario is added/renamed there — this backend can't import .rpy files.
 SCENARIO_CATALOGUE = [
