@@ -8,7 +8,7 @@ from sqlmodel import Session, select
 
 import datetime as _dt
 
-from app.config import SCENARIO_CATALOGUE
+from app.config import CANONICAL_CLOUD_ADMIN_URL, SCENARIO_CATALOGUE
 from app.db import get_session
 from app.models import BackendMode, Car, Entry, LobbyPresence, QrAward, Round
 from app.security import COOKIE_NAME, check_pin, make_session_cookie, require_admin
@@ -225,8 +225,13 @@ def backend_mode_update(
     if mode not in ("cloud", "lan"):
         raise HTTPException(status_code=400, detail="mode must be 'cloud' or 'lan'")
     lan_api_base = lan_api_base.strip().rstrip("/")
-    if mode == "lan" and not lan_api_base:
-        raise HTTPException(status_code=400, detail="lan_api_base required when mode is 'lan'")
+    if mode == "lan":
+        if not lan_api_base:
+            raise HTTPException(status_code=400, detail="lan_api_base required when mode is 'lan'")
+        if not (lan_api_base.startswith("http://") or lan_api_base.startswith("https://")):
+            raise HTTPException(
+                status_code=400, detail="lan_api_base must start with http:// or https://"
+            )
 
     row = db.get(BackendMode, 1)
     if row is None:
@@ -236,4 +241,12 @@ def backend_mode_update(
     row.updated_at = _dt.datetime.utcnow()
     db.add(row)
     db.commit()
-    return RedirectResponse(url="/admin/backend-mode", status_code=303)
+
+    # Send the admin's own browser to whichever server they just made the
+    # active one -- once switched, that's the dashboard that actually shows
+    # live rounds/players (this instance's own view is a separate database
+    # from whichever one game clients are now using). Cross-origin, so the
+    # admin session cookie won't carry over -- they'll need to log in again
+    # on the destination, which the template also warns about up front.
+    target_base = lan_api_base if mode == "lan" else CANONICAL_CLOUD_ADMIN_URL
+    return RedirectResponse(url=f"{target_base}/admin/backend-mode", status_code=303)
