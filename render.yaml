@@ -27,3 +27,10 @@ services:
         generateValue: true
       - key: CORS_ORIGINS
         value: "*"
+      # Render defaults to the newest available Python (3.14 as of this
+      # writing), for which psycopg2-binary has no prebuilt wheel yet --
+      # its compiled .so fails to import with an ABI mismatch
+      # (undefined symbol: _PyInterpreterState_Get). Pin to a version
+      # psycopg2-binary==2.9.9 has known-good wheels for.
+      - key: PYTHON_VERSION
+        value: "3.12.7"
