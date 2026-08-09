@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Backend Mode — Mystery Tournament Admin{% endblock %}
+{% block content %}
+
+<p style="color:var(--muted); font-size:13px;">
+  Every game client checks this deployment first, before doing anything
+  else, to find out where the event is actually running today. Switch to
+  LAN if venue internet is unreliable: run the exact same backend on a
+  laptop connected to a local WiFi router or hotspot (see
+  <code>backend/README.md</code>'s "Run on LAN" section), then point this at
+  that laptop's LAN IP. If a game client can't even reach THIS page (total
+  internet outage), it falls back to whatever's hardcoded locally in
+  <code>cloud_client.rpy</code> instead.
+</p>
+
+<div class="panel">
+  <h2>Current mode: <span class="badge {{ 'in_progress' if mode_row.mode == 'lan' else 'closed' }}">{{ mode_row.mode|upper }}</span></h2>
+  {% if mode_row.mode == "lan" %}
+    <p>Game clients are being pointed at <code>{{ mode_row.lan_api_base }}</code>.</p>
+  {% else %}
+    <p>Game clients are using this cloud deployment directly.</p>
+  {% endif %}
+
+  <form method="post" action="/admin/backend-mode">
+    <label for="mode">Mode</label>
+    <select id="mode" name="mode" required onchange="document.getElementById('lan_row').style.display = (this.value === 'lan') ? '' : 'none';">
+      <option value="cloud" {% if mode_row.mode == "cloud" %}selected{% endif %}>Cloud (this deployment)</option>
+      <option value="lan" {% if mode_row.mode == "lan" %}selected{% endif %}>LAN (local host for the day)</option>
+    </select>
+
+    <div id="lan_row" style="{% if mode_row.mode != 'lan' %}display:none;{% endif %} margin-top:12px;">
+      <label for="lan_api_base">LAN backend URL (host laptop's LAN IP, e.g. http://192.168.1.50:8000)</label>
+      <input type="text" id="lan_api_base" name="lan_api_base" value="{{ mode_row.lan_api_base }}" placeholder="http://192.168.1.50:8000">
+    </div>
+
+    <div style="margin-top:16px;"><button type="submit">Save</button></div>
+  </form>
+</div>
+
+<p style="color:var(--muted); font-size:13px;">
+  Changing this mid-round will not migrate players already connected to the
+  old backend mid-round -- treat it as a between-rounds decision, not
+  something to flip while people are mid-investigation.
+</p>
+
+{% endblock %}

@@ -29,6 +29,11 @@ class ActiveRoundResponse(BaseModel):
     scenario_id: Optional[str] = None
 
 
+class BackendModeResponse(BaseModel):
+    mode: str  # "cloud" | "lan"
+    lan_api_base: Optional[str] = None
+
+
 class HeartbeatRequest(BaseModel):
     name: str
 

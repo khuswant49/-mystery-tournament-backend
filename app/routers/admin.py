@@ -6,9 +6,11 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 
+import datetime as _dt
+
 from app.config import SCENARIO_CATALOGUE
 from app.db import get_session
-from app.models import Car, Entry, LobbyPresence, QrAward, Round
+from app.models import BackendMode, Car, Entry, LobbyPresence, QrAward, Round
 from app.security import COOKIE_NAME, check_pin, make_session_cookie, require_admin
 from app.services import round_service
 
@@ -188,8 +190,6 @@ def update_car(
     db: Session = Depends(get_session),
     _=Depends(require_admin),
 ):
-    import datetime as _dt
-
     car = db.get(Car, car_id)
     if car is None:
         raise HTTPException(status_code=404, detail="car not found")
@@ -202,3 +202,38 @@ def update_car(
     db.add(car)
     db.commit()
     return RedirectResponse(url="/admin/cars", status_code=303)
+
+
+@router.get("/backend-mode", response_class=HTMLResponse)
+def backend_mode_page(request: Request, db: Session = Depends(get_session), _=Depends(require_admin)):
+    row = db.get(BackendMode, 1)
+    if row is None:
+        row = BackendMode()
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+    return templates.TemplateResponse("backend_mode.html", {"request": request, "mode_row": row})
+
+
+@router.post("/backend-mode")
+def backend_mode_update(
+    mode: str = Form(...),
+    lan_api_base: str = Form(""),
+    db: Session = Depends(get_session),
+    _=Depends(require_admin),
+):
+    if mode not in ("cloud", "lan"):
+        raise HTTPException(status_code=400, detail="mode must be 'cloud' or 'lan'")
+    lan_api_base = lan_api_base.strip().rstrip("/")
+    if mode == "lan" and not lan_api_base:
+        raise HTTPException(status_code=400, detail="lan_api_base required when mode is 'lan'")
+
+    row = db.get(BackendMode, 1)
+    if row is None:
+        row = BackendMode()
+    row.mode = mode
+    row.lan_api_base = lan_api_base
+    row.updated_at = _dt.datetime.utcnow()
+    db.add(row)
+    db.commit()
+    return RedirectResponse(url="/admin/backend-mode", status_code=303)

@@ -65,6 +65,21 @@ class LobbyPresence(SQLModel, table=True):
     last_seen: datetime = Field(default_factory=datetime.utcnow)
 
 
+class BackendMode(SQLModel, table=True):
+    """Single-row settings table the admin edits to tell every game client
+    (via GET /api/backend_mode) whether the event is currently running on
+    this cloud deployment or has switched to a LAN host for the day -- see
+    game/core/systems/cloud_client.rpy's bootstrap-against-cloud-first
+    design. id is always 1; there is exactly one row."""
+
+    __tablename__ = "backend_mode"
+
+    id: int = Field(default=1, primary_key=True)
+    mode: str = Field(default="cloud")  # "cloud" | "lan"
+    lan_api_base: str = Field(default="")
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class QrAward(SQLModel, table=True):
     __tablename__ = "qr_awards"
 

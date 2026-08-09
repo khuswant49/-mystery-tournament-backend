@@ -4,9 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
 from app.db import get_session
-from app.models import Entry, LobbyPresence, QrAward, Round, Car
+from app.models import BackendMode, Entry, LobbyPresence, QrAward, Round, Car
 from app.schemas import (
     ActiveRoundResponse,
+    BackendModeResponse,
     CarAward,
     EntryResultResponse,
     HeartbeatRequest,
@@ -35,6 +36,22 @@ def active_round(db: Session = Depends(get_session)):
     if round_ is None:
         return ActiveRoundResponse(active=False)
     return ActiveRoundResponse(active=True, round_id=round_.id, scenario_id=round_.scenario_id)
+
+
+@router.get("/backend_mode", response_model=BackendModeResponse)
+def backend_mode(db: Session = Depends(get_session)):
+    """Bootstrap check every game client makes against this stable cloud
+    deployment before doing anything else, so the admin can redirect
+    everyone to a LAN host for the day (venue internet down, etc.) via a
+    single dashboard toggle instead of rebuilding/redistributing the game.
+    Deliberately unauthenticated -- a game client has no admin session at
+    this point, and there's nothing sensitive in a LAN IP address. If
+    reaching THIS endpoint itself fails (no internet at all), the client
+    falls back to whatever's hardcoded locally in cloud_client.rpy."""
+    row = db.get(BackendMode, 1)
+    if row is None:
+        return BackendModeResponse(mode="cloud", lan_api_base=None)
+    return BackendModeResponse(mode=row.mode, lan_api_base=row.lan_api_base or None)
 
 
 @router.post("/lobby/heartbeat", response_model=HeartbeatResponse)
