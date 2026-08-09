@@ -3,15 +3,17 @@
 {% block content %}
 
 <p style="color:var(--muted); font-size:13px;">
-  Every game client checks this deployment first, before doing anything
+  Every game client checks the cloud deployment first, before doing anything
   else, to find out where the event is actually running today. Switch to
   LAN if venue internet is unreliable: run the exact same backend on a
   laptop connected to a local WiFi router or hotspot (see
-  <code>backend/README.md</code>'s "Run on LAN" section), then point this at
-  that laptop's LAN IP. If a game client can't even reach THIS page (total
-  internet outage), it falls back to whatever's hardcoded locally in
-  <code>cloud_client.rpy</code> instead.
+  <code>backend/README.md</code>'s "Run on LAN" section), then point the
+  cloud dashboard at that laptop's LAN IP. If a game client can't even reach
+  the cloud deployment (total internet outage), it falls back to whatever's
+  hardcoded locally in <code>cloud_client.rpy</code> instead.
 </p>
+
+{% if is_canonical %}
 
 <div class="panel">
   <h2>Current mode: <span class="badge {{ 'in_progress' if mode_row.mode == 'lan' else 'closed' }}">{{ mode_row.mode|upper }}</span></h2>
@@ -91,5 +93,33 @@
   old backend mid-round -- treat it as a between-rounds decision, not
   something to flip while people are mid-investigation.
 </p>
+
+{% else %}
+
+<div class="panel">
+  <h2>This is a LAN server instance</h2>
+  <p>
+    You're viewing <code>{{ this_base }}</code> -- not the canonical cloud
+    deployment. This server has no independent mode setting of its own;
+    only the cloud dashboard's Backend Mode page actually controls what
+    game clients use. Here's what the cloud deployment currently says:
+  </p>
+
+  {% if cloud_status and cloud_status.reachable %}
+    {% if cloud_status.points_here %}
+      <p><span class="badge in_progress">ACTIVE</span> The cloud deployment currently points game clients at <strong>this server</strong>. Start rounds and manage players here.</p>
+    {% elif cloud_status.mode == "lan" %}
+      <p><span class="badge closed">NOT ACTIVE</span> The cloud deployment is currently pointing game clients at a <strong>different</strong> LAN address (<code>{{ cloud_status.lan_api_base }}</code>), not this server.</p>
+    {% else %}
+      <p><span class="badge closed">NOT ACTIVE</span> The cloud deployment is currently set to <strong>Cloud</strong> mode -- game clients are talking to it directly, not this server.</p>
+    {% endif %}
+  {% else %}
+    <p><span class="badge">UNKNOWN</span> Couldn't reach the cloud deployment just now to check -- expected if that's exactly why you switched to LAN (venue internet down). If you set this server as the active one, treat it as active.</p>
+  {% endif %}
+
+  <p style="margin-top:16px;"><a href="{{ canonical_cloud_admin_url }}/admin/backend-mode">Open the cloud dashboard's Backend Mode page</a> to actually change which server is active (requires that dashboard's own login).</p>
+</div>
+
+{% endif %}
 
 {% endblock %}

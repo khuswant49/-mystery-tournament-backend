@@ -2,6 +2,7 @@ import os
 import socket
 from datetime import datetime, timedelta
 
+import httpx
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -239,6 +240,12 @@ def detected_lan_ip(request: Request, _=Depends(require_admin)):
     return JSONResponse({"ip": ip, "suggested_url": f"http://{ip}:{port}"})
 
 
+def _normalize_url(url):
+    if not url:
+        return None
+    return url.strip().rstrip("/").lower()
+
+
 @router.get("/backend-mode", response_class=HTMLResponse)
 def backend_mode_page(request: Request, db: Session = Depends(get_session), _=Depends(require_admin)):
     row = db.get(BackendMode, 1)
@@ -247,7 +254,51 @@ def backend_mode_page(request: Request, db: Session = Depends(get_session), _=De
         db.add(row)
         db.commit()
         db.refresh(row)
-    return templates.TemplateResponse("backend_mode.html", {"request": request, "mode_row": row})
+
+    # Every server running this codebase has its OWN copy of this table --
+    # but only the CANONICAL cloud deployment's row is ever actually
+    # consulted by game clients (see /api/backend_mode and cloud_client.rpy's
+    # bootstrap). A LAN instance's own `mode` row is otherwise meaningless,
+    # so showing it as "the current mode" here would be actively
+    # misleading -- confirmed live: an admin on the LAN server, actually
+    # serving players, saw this page say "CLOUD" (technically true of that
+    # server's own unused row) and reasonably read it as "this server isn't
+    # the active one," when the cloud deployment was in fact pointing
+    # everyone at it. Instead, non-canonical instances get a live
+    # comparison against the real, authoritative source.
+    this_base = _normalize_url(str(request.base_url))
+    is_canonical = this_base == _normalize_url(CANONICAL_CLOUD_ADMIN_URL)
+
+    cloud_status = None
+    if not is_canonical:
+        cloud_status = {"reachable": False, "mode": None, "lan_api_base": None, "points_here": False}
+        try:
+            resp = httpx.get(f"{CANONICAL_CLOUD_ADMIN_URL}/api/backend_mode", timeout=4.0)
+            resp.raise_for_status()
+            data = resp.json()
+            cloud_status["reachable"] = True
+            cloud_status["mode"] = data.get("mode")
+            cloud_status["lan_api_base"] = data.get("lan_api_base")
+            cloud_status["points_here"] = (
+                data.get("mode") == "lan" and _normalize_url(data.get("lan_api_base")) == this_base
+            )
+        except httpx.HTTPError:
+            # Cloud unreachable -- expected if this IS the reason LAN mode
+            # is in use (venue internet down). Template shows a neutral
+            # "couldn't check" message rather than treating this as an error.
+            pass
+
+    return templates.TemplateResponse(
+        "backend_mode.html",
+        {
+            "request": request,
+            "mode_row": row,
+            "is_canonical": is_canonical,
+            "this_base": this_base,
+            "cloud_status": cloud_status,
+            "canonical_cloud_admin_url": CANONICAL_CLOUD_ADMIN_URL,
+        },
+    )
 
 
 @router.post("/backend-mode")

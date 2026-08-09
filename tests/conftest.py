@@ -3,6 +3,11 @@ import tempfile
 
 os.environ.setdefault("ADMIN_PIN", "test-pin")
 os.environ.setdefault("COOKIE_SECRET", "test-secret")
+# Matches TestClient's default request base_url ("http://testserver") so
+# tests hitting GET /admin/backend-mode exercise the "this IS the canonical
+# cloud deployment" branch by default, without making a real network call
+# to the actual production URL.
+os.environ.setdefault("CANONICAL_CLOUD_ADMIN_URL", "http://testserver")
 
 import pytest
 from fastapi.testclient import TestClient

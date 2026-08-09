@@ -11,10 +11,15 @@ COOKIE_SECRET = os.environ.get("COOKIE_SECRET", "dev-only-insecure-secret")
 CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "*").split(",")]
 
 # Mirrors CLOUD_API_BASE_STABLE in game/core/systems/cloud_client.rpy -- the
-# one well-known address every game client bootstraps against. Used here to
+# one well-known address every game client bootstraps against. Used to
 # redirect the admin back to the canonical cloud dashboard when they switch
-# the Backend Mode toggle back to "cloud" (see admin.py's backend_mode_update).
-CANONICAL_CLOUD_ADMIN_URL = "https://mystery-tournament-backend.onrender.com"
+# the Backend Mode toggle back to "cloud" (see admin.py's backend_mode_update),
+# and to tell whether THIS running instance is that canonical deployment or
+# a LAN/other instance (see backend_mode_page). Env-overridable so tests
+# don't have to match the real production URL exactly -- see conftest.py.
+CANONICAL_CLOUD_ADMIN_URL = os.environ.get(
+    "CANONICAL_CLOUD_ADMIN_URL", "https://mystery-tournament-backend.onrender.com"
+)
 
 # Every round auto-closes once this many seconds pass since it opened, even if
 # fewer than 3 players ever finish correctly. The scenario itself gives a
