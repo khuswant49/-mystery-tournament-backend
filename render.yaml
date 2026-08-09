@@ -1,6 +1,11 @@
 databases:
+  # NOTE: free-tier Postgres is auto-deleted 90 days after creation, and the
+  # free web service below sleeps after 15 min idle (30-60s cold start on the
+  # next request). Both are fine for testing but MUST be upgraded to a paid
+  # plan (e.g. basic-256mb / starter) before the actual event, or a player
+  # finishing mid-round could stall waiting for a sleeping instance to wake.
   - name: mystery-tournament-db
-    plan: basic-256mb
+    plan: free
     databaseName: mystery_tournament
     user: mystery_tournament
 
@@ -8,7 +13,7 @@ services:
   - type: web
     name: mystery-tournament-backend
     runtime: python
-    plan: starter
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
