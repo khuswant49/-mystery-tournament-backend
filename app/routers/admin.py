@@ -1,8 +1,9 @@
 import os
+import socket
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 
@@ -202,6 +203,39 @@ def update_car(
     db.add(car)
     db.commit()
     return RedirectResponse(url="/admin/cars", status_code=303)
+
+
+@router.get("/api/detected-lan-ip")
+def detected_lan_ip(request: Request, _=Depends(require_admin)):
+    """Detects the LOCAL NETWORK IP of whichever machine is running THIS
+    process -- reliable, but only actually useful when this request lands
+    on the LAN host laptop itself (e.g. opened via
+    http://localhost:<port>/admin/backend-mode on that machine). Hit on
+    Render, this would just return Render's own container-internal address,
+    which is meaningless for a LAN URL -- Render has no visibility into a
+    laptop on someone's home/venue WiFi, so there's no way to detect that
+    address remotely; this only works run from the machine in question.
+
+    Uses the standard "open a UDP socket toward a public address, read back
+    which local interface the OS picked" trick -- no packets actually leave
+    the machine (UDP connect() just makes a local routing decision), so this
+    works even with a router/hotspot that has no real internet uplink.
+    """
+    ip = "127.0.0.1"
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+    except OSError:
+        pass
+    finally:
+        s.close()
+
+    # Reuse whatever port this very request came in on, rather than
+    # assuming 8000 -- correct even if the admin ran uvicorn on a different
+    # port.
+    port = request.url.port or 8000
+    return JSONResponse({"ip": ip, "suggested_url": f"http://{ip}:{port}"})
 
 
 @router.get("/backend-mode", response_class=HTMLResponse)

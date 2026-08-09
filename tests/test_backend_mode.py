@@ -70,3 +70,18 @@ def test_switching_to_lan_without_a_scheme_is_rejected(client):
     resp = client.post("/admin/backend-mode", data={"mode": "lan", "lan_api_base": "192.168.1.50:8000"})
     assert resp.status_code == 400
     assert client.get("/api/backend_mode").json()["mode"] == "cloud"
+
+
+def test_unauthenticated_cannot_probe_detected_ip(client):
+    resp = client.get("/admin/api/detected-lan-ip", follow_redirects=False)
+    assert resp.status_code in (401, 303)
+
+
+def test_detected_ip_endpoint_returns_a_usable_url(client):
+    client.post("/admin/login", data={"pin": "test-pin"})
+    resp = client.get("/admin/api/detected-lan-ip")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "ip" in data and "suggested_url" in data
+    assert data["suggested_url"].startswith("http://")
+    assert data["ip"] in data["suggested_url"]

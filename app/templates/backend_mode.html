@@ -30,12 +30,30 @@
 
     <div id="lan_row" style="{% if mode_row.mode != 'lan' %}display:none;{% endif %} margin-top:12px;">
       <label for="lan_api_base">LAN backend URL (host laptop's LAN IP, e.g. http://192.168.1.50:8000)</label>
-      <input type="text" id="lan_api_base" name="lan_api_base" value="{{ mode_row.lan_api_base }}" placeholder="http://192.168.1.50:8000">
+      <div style="display:flex; gap:8px; align-items:center;">
+        <input type="text" id="lan_api_base" name="lan_api_base" value="{{ mode_row.lan_api_base }}" placeholder="http://192.168.1.50:8000" style="flex:1;">
+        <button type="button" id="detect_btn" onclick="detectLanIp();">Detect this machine's IP</button>
+      </div>
+      <p id="detect_status" style="color:var(--muted); font-size:12px; margin-top:6px;"></p>
     </div>
 
     <div style="margin-top:16px;"><button type="submit">Save</button></div>
   </form>
 </div>
+
+<p style="color:var(--muted); font-size:13px;">
+  <strong>"Detect this machine's IP"</strong> only gives a correct answer
+  when run from the LAN laptop's own copy of this page -- open
+  <code>http://localhost:&lt;port&gt;/admin/backend-mode</code> directly on
+  that laptop and click it there. It fills in and copies the right value so
+  you don't need to run <code>ipconfig</code>/<code>ifconfig</code>
+  yourself. Clicking it here on the cloud dashboard (or any machine other
+  than the actual LAN host) would just detect THIS machine's own network
+  address, which isn't what you want -- there's no way for the cloud
+  deployment to see a laptop on your venue's WiFi from here, so getting the
+  real value onto this page still means pasting it in from wherever you
+  detected it.
+</p>
 
 <p style="color:var(--muted); font-size:13px;">
   Saving sends <strong>this browser</strong> straight to whichever
@@ -46,6 +64,27 @@
   your login session won't carry over: you'll need to enter that server's
   admin PIN again once you land there.
 </p>
+
+<script>
+  function detectLanIp() {
+    var status = document.getElementById('detect_status');
+    status.textContent = 'Detecting…';
+    fetch('/admin/api/detected-lan-ip')
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        document.getElementById('lan_api_base').value = data.suggested_url;
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(data.suggested_url).catch(function () {});
+          status.textContent = 'Detected ' + data.suggested_url + ' (copied to clipboard).';
+        } else {
+          status.textContent = 'Detected ' + data.suggested_url + '.';
+        }
+      })
+      .catch(function () {
+        status.textContent = 'Could not detect an IP -- enter it manually.';
+      });
+  }
+</script>
 
 <p style="color:var(--muted); font-size:13px;">
   Changing this mid-round will not migrate players already connected to the
