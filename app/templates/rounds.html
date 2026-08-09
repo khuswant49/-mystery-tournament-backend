@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Rounds — Mystery Tournament Admin{% endblock %}
+{% block content %}
+
+<div class="panel">
+  <h2>Start a Round</h2>
+  {% if active %}
+    <p>A round is already active (<a href="/admin/rounds/{{ active.id }}">{{ active.scenario_id }}, {{ active.status }}</a>) — close it before starting another.</p>
+  {% else %}
+    <form method="post" action="/admin/rounds">
+      <label for="scenario_id">Scenario</label>
+      <select id="scenario_id" name="scenario_id" required>
+        {% for s in scenarios %}
+        <option value="{{ s.id }}">{{ s.id }} — {{ s.title }}</option>
+        {% endfor %}
+      </select>
+      <div style="margin-top:16px;"><button type="submit">Start Round</button></div>
+    </form>
+  {% endif %}
+</div>
+
+<div class="panel" id="lobby-panel">
+  {% include "_lobby_panel.html" %}
+</div>
+
+<div class="panel" id="rounds-panel">
+  {% include "_rounds_table.html" %}
+</div>
+
+<script>
+  // Live-update the lobby list and rounds table without touching the rest
+  // of the page -- a full page.reload() here was wiping out whatever
+  // scenario the admin had picked in the "Start a Round" dropdown before
+  // they clicked submit. Those two panels are the only things that ever
+  // change while this page sits idle, so only they get refreshed.
+  function refreshPanel(url, elementId) {
+    fetch(url)
+      .then(function (r) { return r.text(); })
+      .then(function (html) {
+        var el = document.getElementById(elementId);
+        if (el) el.innerHTML = html;
+      })
+      .catch(function () { /* transient network hiccup -- try again next tick */ });
+  }
+
+  setInterval(function () {
+    refreshPanel('/admin/partials/lobby', 'lobby-panel');
+    refreshPanel('/admin/partials/rounds_table', 'rounds-panel');
+  }, 3000);
+</script>
+
+{% endblock %}

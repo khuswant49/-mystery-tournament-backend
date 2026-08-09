@@ -1,0 +1,54 @@
+<div class="panel">
+  <h2>{{ round.scenario_id }} — <span class="badge {{ round.status }}">{{ round.status }}</span></h2>
+  <p>Opened {{ round.opened_at.strftime('%H:%M:%S') if round.opened_at else '—' }}
+     {% if round.closed_at %} · Closed {{ round.closed_at.strftime('%H:%M:%S') }}{% endif %}</p>
+
+  {% if round.status == "in_progress" %}
+  <form method="post" action="/admin/rounds/{{ round.id }}/force_close" onsubmit="return confirm('Force-close this round now? Normally it closes itself automatically once 3 players finish correctly.');">
+    <button type="submit" class="danger">Force Close</button>
+  </form>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h2>Ranked (correct finishers)</h2>
+  <table>
+    <tr><th>Rank</th><th>Player</th><th>Time</th><th>Score</th><th>Car / QR</th></tr>
+    {% for e in ranked %}
+    {% set aw = awards_by_entry.get(e.id) %}
+    <tr>
+      <td class="rank{{ aw[0].rank if aw and aw[0].rank <= 3 else '' }}">
+        {% if aw %}#{{ aw[0].rank }}{% else %}—{% endif %}
+      </td>
+      <td>{{ e.player_name }}</td>
+      <td>{{ "%.1f"|format(e.elapsed_seconds) }}s</td>
+      <td>{{ e.score }}</td>
+      <td>
+        {% if aw %}
+          {{ aw[1].label }}
+          <div class="qr-pair" style="margin-top:8px;">
+            <div><small>WiFi</small><br><img src="data:image/png;base64,{{ aw[0].wifi_png_b64 }}"></div>
+            <div><small>Control</small><br><img src="data:image/png;base64,{{ aw[0].control_png_b64 }}"></div>
+          </div>
+        {% elif round.status == "in_progress" %}
+          waiting for close…
+        {% else %}
+          <span style="color:var(--muted)">no award — solved correctly, but round had already closed</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="panel">
+  <h2>Still Playing / Not Solved</h2>
+  <table>
+    {% for e in pending %}
+    <tr><td>{{ e.player_name }}</td><td>playing…</td></tr>
+    {% endfor %}
+    {% for e in dnf %}
+    <tr><td>{{ e.player_name }}</td><td>{{ e.ending }}</td></tr>
+    {% endfor %}
+  </table>
+</div>

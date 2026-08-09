@@ -1,0 +1,19 @@
+<h2>Waiting in Lobby ({{ waiting_players|length }})</h2>
+<p style="color:var(--muted); font-size:13px; margin-top:-8px;">
+  Players who have opened "Join Session" and are sitting on the waiting
+  screen, before you've started a round. Updates automatically; someone who
+  closes their game drops off within a few seconds.
+</p>
+{% if not waiting_players %}
+  <p style="color:var(--muted); font-style:italic;">No one is currently waiting.</p>
+{% else %}
+  <table>
+    <tr><th>Player</th><th>Last seen</th></tr>
+    {% for p in waiting_players %}
+    <tr>
+      <td>{{ p.player_name }}</td>
+      <td>{{ p.last_seen.strftime('%H:%M:%S') }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+{% endif %}

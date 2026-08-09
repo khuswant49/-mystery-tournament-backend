@@ -1,0 +1,100 @@
+:root {
+  --bg: #0d1117;
+  --panel: #161b22;
+  --edge: #2a3040;
+  --text: #c9d1d9;
+  --muted: #8b949e;
+  --blue: #58a6ff;
+  --gold: #d29922;
+  --green: #4caf7d;
+  --red: #f85149;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+header.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 28px;
+  border-bottom: 1px solid var(--edge);
+  background: var(--panel);
+}
+
+header.topbar h1 {
+  font-size: 16px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin: 0;
+}
+
+nav a {
+  color: var(--text);
+  text-decoration: none;
+  margin-left: 20px;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+nav a:hover { color: var(--blue); }
+
+main { max-width: 960px; margin: 32px auto; padding: 0 20px; }
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  padding: 20px 24px;
+  margin-bottom: 20px;
+}
+
+h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gold); margin-top: 0; }
+
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--edge); }
+th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
+
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; text-transform: uppercase; }
+.badge.pending { background: #3a3020; color: var(--gold); }
+.badge.in_progress { background: #1f3a2a; color: var(--green); }
+.badge.closed { background: #2a2a3a; color: var(--muted); }
+
+.rank1 { color: #d4af37; font-weight: 700; }
+.rank2 { color: #c0c0c0; font-weight: 700; }
+.rank3 { color: #a06030; font-weight: 700; }
+
+button, input[type=submit] {
+  background: var(--blue);
+  color: #0d1117;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 13px;
+}
+button.danger { background: var(--red); color: #fff; }
+
+input[type=text], input[type=password], select {
+  background: #0d1117;
+  border: 1px solid var(--edge);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; margin-top: 12px; }
+
+.error { color: var(--red); font-size: 13px; margin-top: 10px; }
+
+.qr-pair { display: flex; gap: 20px; }
+.qr-pair img { width: 140px; height: 140px; background: #fff; padding: 6px; border-radius: 4px; }

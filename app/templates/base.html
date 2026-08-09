@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{% block title %}Mystery Tournament Admin{% endblock %}</title>
+<link rel="stylesheet" href="/static/admin.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>Mystery Tournament — Admin</h1>
+  <nav>
+    <a href="/admin/">Rounds</a>
+    <a href="/admin/leaderboard">All-Time Leaderboard</a>
+    <a href="/admin/cars">Cars</a>
+    <form method="post" action="/admin/logout" style="display:inline">
+      <a href="#" onclick="this.closest('form').submit(); return false;">Logout</a>
+    </form>
+  </nav>
+</header>
+<main>
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>

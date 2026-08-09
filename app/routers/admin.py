@@ -1,0 +1,204 @@
+import os
+from datetime import datetime, timedelta
+
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+from sqlmodel import Session, select
+
+from app.config import SCENARIO_CATALOGUE
+from app.db import get_session
+from app.models import Car, Entry, LobbyPresence, QrAward, Round
+from app.security import COOKIE_NAME, check_pin, make_session_cookie, require_admin
+from app.services import round_service
+
+router = APIRouter(prefix="/admin")
+
+_templates_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
+templates = Jinja2Templates(directory=_templates_dir)
+
+# The join-waiting screen sends a heartbeat roughly every 1.5s -- anyone
+# still "counts as waiting" if we've heard from them within the last few
+# ticks. Wide enough to tolerate a missed beat or two, tight enough that
+# someone who quit the game a minute ago drops off promptly.
+_LOBBY_FRESHNESS = timedelta(seconds=8)
+
+
+@router.get("/login", response_class=HTMLResponse)
+def login_page(request: Request):
+    return templates.TemplateResponse("login.html", {"request": request, "error": None})
+
+
+@router.post("/login")
+def login_submit(pin: str = Form(...)):
+    if not check_pin(pin):
+        # 401 render with an error instead of a bare error code, since this is
+        # a human filling out a form, not an API client.
+        raise HTTPException(status_code=401, detail="wrong PIN")
+
+    response = RedirectResponse(url="/admin/", status_code=303)
+    response.set_cookie(COOKIE_NAME, make_session_cookie(), httponly=True, samesite="lax")
+    return response
+
+
+@router.post("/logout")
+def logout():
+    response = RedirectResponse(url="/admin/login", status_code=303)
+    response.delete_cookie(COOKIE_NAME)
+    return response
+
+
+@router.get("/", response_class=HTMLResponse)
+def rounds_page(request: Request, db: Session = Depends(get_session), _=Depends(require_admin)):
+    rounds = db.exec(select(Round).order_by(Round.created_at.desc()).limit(25)).all()
+    active = round_service.get_active_round(db)
+
+    cutoff = datetime.utcnow() - _LOBBY_FRESHNESS
+    waiting_players = db.exec(
+        select(LobbyPresence)
+        .where(LobbyPresence.last_seen >= cutoff)
+        .order_by(LobbyPresence.last_seen.asc())
+    ).all()
+
+    return templates.TemplateResponse(
+        "rounds.html",
+        {
+            "request": request,
+            "rounds": rounds,
+            "active": active,
+            "scenarios": SCENARIO_CATALOGUE,
+            "waiting_players": waiting_players,
+        },
+    )
+
+
+@router.post("/rounds")
+def start_round(scenario_id: str = Form(...), db: Session = Depends(get_session), _=Depends(require_admin)):
+    round_service.create_round(db, scenario_id)
+    return RedirectResponse(url="/admin/", status_code=303)
+
+
+@router.get("/partials/lobby", response_class=HTMLResponse)
+def lobby_partial(request: Request, db: Session = Depends(get_session), _=Depends(require_admin)):
+    cutoff = datetime.utcnow() - _LOBBY_FRESHNESS
+    waiting_players = db.exec(
+        select(LobbyPresence)
+        .where(LobbyPresence.last_seen >= cutoff)
+        .order_by(LobbyPresence.last_seen.asc())
+    ).all()
+    return templates.TemplateResponse(
+        "_lobby_panel.html", {"request": request, "waiting_players": waiting_players}
+    )
+
+
+@router.get("/partials/rounds_table", response_class=HTMLResponse)
+def rounds_table_partial(request: Request, db: Session = Depends(get_session), _=Depends(require_admin)):
+    rounds = db.exec(select(Round).order_by(Round.created_at.desc()).limit(25)).all()
+    return templates.TemplateResponse("_rounds_table.html", {"request": request, "rounds": rounds})
+
+
+def _build_round_detail_context(request: Request, round_id: str, db: Session) -> dict:
+    round_ = db.get(Round, round_id)
+    if round_ is None:
+        raise HTTPException(status_code=404, detail="round not found")
+
+    round_ = round_service.maybe_close_round(db, round_)
+
+    # Awards are granted the instant a player qualifies (see submit_result())
+    # -- not batched at round-close -- so this needs to be built regardless
+    # of round_.status, otherwise the 1st/2nd finisher's QR wouldn't show up
+    # here until the whole round finished around everyone else.
+    awards = db.exec(select(QrAward).where(QrAward.round_id == round_id)).all()
+    cars_by_id = {c.id: c for c in db.exec(select(Car)).all()}
+    awards_by_entry = {a.entry_id: (a, cars_by_id.get(a.car_id)) for a in awards}
+
+    entries = db.exec(select(Entry).where(Entry.round_id == round_id)).all()
+    # Awarded entries first (in award/arrival order -- that's what actually
+    # decided who got a car now, not elapsed time), then any other correct
+    # finishers who didn't get a slot, sorted by when they submitted.
+    ranked = sorted(
+        [e for e in entries if e.correct],
+        key=lambda e: (
+            awards_by_entry[e.id][0].rank if e.id in awards_by_entry else 999,
+            e.submitted_at or datetime.max,
+        ),
+    )
+    dnf = [e for e in entries if e.submitted_at and not e.correct]
+    pending = [e for e in entries if not e.submitted_at]
+
+    return {
+        "request": request,
+        "round": round_,
+        "ranked": ranked,
+        "dnf": dnf,
+        "pending": pending,
+        "awards_by_entry": awards_by_entry,
+    }
+
+
+@router.get("/rounds/{round_id}", response_class=HTMLResponse)
+def round_detail(
+    round_id: str, request: Request, db: Session = Depends(get_session), _=Depends(require_admin)
+):
+    context = _build_round_detail_context(request, round_id, db)
+    return templates.TemplateResponse("round_detail.html", context)
+
+
+@router.get("/partials/round_live/{round_id}", response_class=HTMLResponse)
+def round_live_partial(
+    round_id: str, request: Request, db: Session = Depends(get_session), _=Depends(require_admin)
+):
+    context = _build_round_detail_context(request, round_id, db)
+    return templates.TemplateResponse("_round_live.html", context)
+
+
+@router.post("/rounds/{round_id}/force_close")
+def force_close(round_id: str, db: Session = Depends(get_session), _=Depends(require_admin)):
+    round_ = db.get(Round, round_id)
+    if round_ is None:
+        raise HTTPException(status_code=404, detail="round not found")
+    round_service.force_close_round(db, round_)
+    return RedirectResponse(url=f"/admin/rounds/{round_id}", status_code=303)
+
+
+@router.get("/leaderboard", response_class=HTMLResponse)
+def all_time_leaderboard(request: Request, db: Session = Depends(get_session), _=Depends(require_admin)):
+    entries = db.exec(
+        select(Entry, Round)
+        .where(Entry.round_id == Round.id, Entry.correct == True)  # noqa: E712
+        .order_by(Entry.elapsed_seconds.asc())
+    ).all()
+    rows = [{"entry": e, "round": r} for e, r in entries]
+    return templates.TemplateResponse("alltime.html", {"request": request, "rows": rows})
+
+
+@router.get("/cars", response_class=HTMLResponse)
+def cars_page(request: Request, db: Session = Depends(get_session), _=Depends(require_admin)):
+    cars = db.exec(select(Car).order_by(Car.sort_order.asc())).all()
+    return templates.TemplateResponse("cars.html", {"request": request, "cars": cars})
+
+
+@router.post("/cars/{car_id}")
+def update_car(
+    car_id: int,
+    label: str = Form(...),
+    wifi_ssid: str = Form(...),
+    wifi_password: str = Form(...),
+    control_url: str = Form(...),
+    db: Session = Depends(get_session),
+    _=Depends(require_admin),
+):
+    import datetime as _dt
+
+    car = db.get(Car, car_id)
+    if car is None:
+        raise HTTPException(status_code=404, detail="car not found")
+
+    car.label = label
+    car.wifi_ssid = wifi_ssid
+    car.wifi_password = wifi_password
+    car.control_url = control_url
+    car.updated_at = _dt.datetime.utcnow()
+    db.add(car)
+    db.commit()
+    return RedirectResponse(url="/admin/cars", status_code=303)

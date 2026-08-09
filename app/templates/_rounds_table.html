@@ -1,0 +1,13 @@
+<h2>Recent Rounds</h2>
+<table>
+  <tr><th>Scenario</th><th>Status</th><th>Opened</th><th>Closed</th><th></th></tr>
+  {% for r in rounds %}
+  <tr>
+    <td>{{ r.scenario_id }}</td>
+    <td><span class="badge {{ r.status }}">{{ r.status }}</span></td>
+    <td>{{ r.opened_at.strftime('%H:%M:%S') if r.opened_at else '—' }}</td>
+    <td>{{ r.closed_at.strftime('%H:%M:%S') if r.closed_at else '—' }}</td>
+    <td><a href="/admin/rounds/{{ r.id }}">View</a></td>
+  </tr>
+  {% endfor %}
+</table>

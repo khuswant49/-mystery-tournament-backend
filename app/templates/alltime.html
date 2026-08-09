@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}All-Time Leaderboard — Mystery Tournament Admin{% endblock %}
+{% block content %}
+
+<div class="panel">
+  <h2>All-Time Leaderboard (all closed rounds, fastest correct first)</h2>
+  <table>
+    <tr><th>#</th><th>Player</th><th>Scenario</th><th>Time</th><th>Score</th></tr>
+    {% for row in rows %}
+    <tr>
+      <td class="rank{{ loop.index if loop.index <= 3 else '' }}">{{ loop.index }}</td>
+      <td>{{ row.entry.player_name }}</td>
+      <td>{{ row.round.scenario_id }}</td>
+      <td>{{ "%.1f"|format(row.entry.elapsed_seconds) }}s</td>
+      <td>{{ row.entry.score }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5">No completed rounds yet.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+{% endblock %}

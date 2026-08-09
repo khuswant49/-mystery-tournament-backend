@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Round {{ round.scenario_id }} — Mystery Tournament Admin{% endblock %}
+{% block content %}
+
+<div id="round-live">
+  {% include "_round_live.html" %}
+</div>
+
+{% if round.status == "in_progress" %}
+<script>
+  // Poll for the live round state (ranked/pending/dnf tables, status badge)
+  // and swap it in without a full page reload -- avoids the flicker/scroll
+  // jump a hard refresh causes every couple of seconds. The Force Close
+  // button's inline onsubmit handler keeps working fine after innerHTML
+  // swaps since it's a plain HTML attribute, re-parsed each time.
+  (function poll() {
+    fetch('/admin/partials/round_live/{{ round.id }}')
+      .then(function (r) { return r.text(); })
+      .then(function (html) {
+        var el = document.getElementById('round-live');
+        if (el) el.innerHTML = html;
+      })
+      .catch(function () { /* transient network hiccup -- try again next tick */ })
+      .then(function () { setTimeout(poll, 2000); });
+  })();
+</script>
+{% endif %}
+
+{% endblock %}

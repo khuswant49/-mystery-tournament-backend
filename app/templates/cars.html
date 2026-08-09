@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Cars — Mystery Tournament Admin{% endblock %}
+{% block content %}
+
+<p style="color:var(--muted); font-size:13px;">
+  These are the credentials/URL baked into the QR codes handed to the top 3
+  finishers of each round (rank 1 gets the lowest sort-order car, and so on).
+  Update these once you know the real SSID/password/control URL for each
+  physical car.
+</p>
+
+{% for car in cars %}
+<div class="panel">
+  <h2>{{ car.label }} (sort order {{ car.sort_order }})</h2>
+  <form method="post" action="/admin/cars/{{ car.id }}">
+    <label for="label{{ car.id }}">Label</label>
+    <input type="text" id="label{{ car.id }}" name="label" value="{{ car.label }}" required>
+
+    <label for="ssid{{ car.id }}">WiFi SSID</label>
+    <input type="text" id="ssid{{ car.id }}" name="wifi_ssid" value="{{ car.wifi_ssid }}" required>
+
+    <label for="pass{{ car.id }}">WiFi Password</label>
+    <input type="text" id="pass{{ car.id }}" name="wifi_password" value="{{ car.wifi_password }}" required>
+
+    <label for="url{{ car.id }}">Control URL</label>
+    <input type="text" id="url{{ car.id }}" name="control_url" value="{{ car.control_url }}" required>
+
+    <div style="margin-top:16px;"><button type="submit">Save</button></div>
+  </form>
+</div>
+{% endfor %}
+
+{% endblock %}

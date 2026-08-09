@@ -1,0 +1,24 @@
+databases:
+  - name: mystery-tournament-db
+    plan: basic-256mb
+    databaseName: mystery_tournament
+    user: mystery_tournament
+
+services:
+  - type: web
+    name: mystery-tournament-backend
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mystery-tournament-db
+          property: connectionString
+      - key: ADMIN_PIN
+        sync: false
+      - key: COOKIE_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: "*"
