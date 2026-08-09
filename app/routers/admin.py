@@ -12,12 +12,13 @@ import datetime as _dt
 from app.config import CANONICAL_CLOUD_ADMIN_URL, SCENARIO_CATALOGUE
 from app.db import get_session
 from app.models import BackendMode, Car, Entry, LobbyPresence, QrAward, Round
+from app.resources import app_dir
 from app.security import COOKIE_NAME, check_pin, make_session_cookie, require_admin
 from app.services import round_service
 
 router = APIRouter(prefix="/admin")
 
-_templates_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "templates")
+_templates_dir = os.path.join(app_dir(), "templates")
 templates = Jinja2Templates(directory=_templates_dir)
 
 # The join-waiting screen sends a heartbeat roughly every 1.5s -- anyone

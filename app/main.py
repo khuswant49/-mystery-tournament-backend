@@ -9,6 +9,7 @@ from sqlmodel import Session, select
 import app.db as db
 from app.config import CORS_ORIGINS
 from app.models import Car
+from app.resources import app_dir
 from app.routers import admin, public
 
 app = FastAPI(title="Mystery Tournament Admin & Game API")
@@ -38,7 +39,7 @@ app.add_middleware(
 app.include_router(public.router)
 app.include_router(admin.router)
 
-_static_dir = os.path.join(os.path.dirname(__file__), "static")
+_static_dir = os.path.join(app_dir(), "static")
 if os.path.isdir(_static_dir):
     app.mount("/static", StaticFiles(directory=_static_dir), name="static")
 

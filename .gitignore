@@ -5,3 +5,6 @@ local.db
 .env
 .pytest_cache/
 uvicorn.log
+build/
+dist/
+lan_server_config.txt
