@@ -34,6 +34,53 @@ def test_active_round_check_has_no_side_effects(client):
         assert len(db.exec(select(Entry)).all()) == 0
 
 
+def test_repeated_join_with_same_name_returns_the_same_entry(client):
+    # Regression test for a real, repeatedly-reproduced bug: a client-side
+    # join request that times out (Render's free tier can be slow) may have
+    # already succeeded server-side, and the Ren'Py client retries on what
+    # it sees as a failure -- without this, every retry created a brand new
+    # Entry row, leaving duplicate "still playing" ghosts in the admin
+    # dashboard for a player who actually already joined (or even already
+    # won). /api/join must be idempotent per (round, name).
+    with _db() as db:
+        round_service.create_round(db, "SC01")
+
+    first = client.post("/api/join", json={"name": "lana"}).json()
+    second = client.post("/api/join", json={"name": "lana"}).json()
+    third = client.post("/api/join", json={"name": "lana"}).json()
+
+    assert first["entry_id"] == second["entry_id"] == third["entry_id"]
+
+    with _db() as db:
+        from app.models import Entry
+
+        rows = db.exec(select(Entry).where(Entry.player_name == "lana")).all()
+        assert len(rows) == 1
+
+
+def test_repeated_join_still_returns_the_entry_after_it_already_won(client):
+    # The specific scenario reported live: a player wins, is routed back
+    # toward the join flow, and a retried/duplicate join call must still
+    # resolve to their already-submitted, already-ranked entry -- not spawn
+    # a fresh, never-submitted duplicate that sits stuck "playing..."
+    # forever in the admin dashboard.
+    with _db() as db:
+        round_ = round_service.create_round(db, "SC01")
+        entry = round_service.join_round(db, "lana")
+        round_service.submit_result(db, entry, 43.9, True, 545, "true_ending")
+        entry_id = entry.id
+
+    resp = client.post("/api/join", json={"name": "lana"}).json()
+    assert resp["entry_id"] == entry_id
+
+    with _db() as db:
+        from app.models import Entry
+
+        rows = db.exec(select(Entry).where(Entry.player_name == "lana")).all()
+        assert len(rows) == 1
+        assert rows[0].correct is True
+
+
 def test_first_correct_finisher_is_awarded_instantly_without_waiting(client):
     """The core property the whole instant-award design exists for: whoever
     submits correctly FIRST gets their rank+car immediately, while the round

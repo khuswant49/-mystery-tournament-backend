@@ -39,9 +39,31 @@ def create_round(db: Session, scenario_id: str) -> Round:
 
 
 def join_round(db: Session, player_name: str) -> Entry:
+    """Idempotent by (round, player_name): repeated calls for a name that
+    already has an entry in the currently active round just return that
+    same entry instead of creating another one. This is the real fix for a
+    duplicate-entry bug seen repeatedly in live testing -- a client-side
+    join request that times out (Render's free tier can be slow) may have
+    already succeeded server-side; the Ren'Py client's own retry-on-failure
+    logic can't tell the difference and would otherwise create a second
+    entry every time it retries. Also covers a player accidentally getting
+    routed back through the join flow a second time for a round they
+    already have an outcome in (e.g. after winning). Names aren't a real
+    identity system here (no accounts), so two genuinely different players
+    who happen to type the identical name in the same round would collide
+    -- an accepted tradeoff for a low-stakes, in-person event where that's
+    rare and easy to work around (ask one of them to add a number), versus
+    the alternative of a reliably-reproducible duplicate-entry bug.
+    """
     round_ = get_active_round(db)
     if round_ is None:
         raise NoActiveRoundError()
+
+    existing = db.exec(
+        select(Entry).where(Entry.round_id == round_.id, Entry.player_name == player_name)
+    ).first()
+    if existing is not None:
+        return existing
 
     entry = Entry(round_id=round_.id, player_name=player_name)
     db.add(entry)
