@@ -32,11 +32,7 @@
 
     <div id="lan_row" style="{% if mode_row.mode != 'lan' %}display:none;{% endif %} margin-top:12px;">
       <label for="lan_api_base">LAN backend URL (host laptop's LAN IP, e.g. http://192.168.1.50:8000)</label>
-      <div style="display:flex; gap:8px; align-items:center;">
-        <input type="text" id="lan_api_base" name="lan_api_base" value="{{ mode_row.lan_api_base }}" placeholder="http://192.168.1.50:8000" style="flex:1;">
-        <button type="button" id="detect_btn" onclick="detectLanIp();">Detect this machine's IP</button>
-      </div>
-      <p id="detect_status" style="color:var(--muted); font-size:12px; margin-top:6px;"></p>
+      <input type="text" id="lan_api_base" name="lan_api_base" value="{{ prefill_lan_api_base or mode_row.lan_api_base }}" placeholder="http://192.168.1.50:8000" style="width:100%;">
     </div>
 
     <div style="margin-top:16px;"><button type="submit">Save</button></div>
@@ -44,17 +40,14 @@
 </div>
 
 <p style="color:var(--muted); font-size:13px;">
-  <strong>"Detect this machine's IP"</strong> only gives a correct answer
-  when run from the LAN laptop's own copy of this page -- open
-  <code>http://localhost:&lt;port&gt;/admin/backend-mode</code> directly on
-  that laptop and click it there. It fills in and copies the right value so
-  you don't need to run <code>ipconfig</code>/<code>ifconfig</code>
-  yourself. Clicking it here on the cloud dashboard (or any machine other
-  than the actual LAN host) would just detect THIS machine's own network
-  address, which isn't what you want -- there's no way for the cloud
-  deployment to see a laptop on your venue's WiFi from here, so getting the
-  real value onto this page still means pasting it in from wherever you
-  detected it.
+  This deployment can't detect a LAN address for you -- Render (or wherever
+  this cloud instance runs) has no visibility into a laptop on your venue's
+  WiFi, so a "detect" button here would only ever find <em>this server's
+  own</em> network address, not the LAN host's. Instead, open the LAN
+  server's own admin dashboard (<code>http://&lt;lan-ip&gt;:8000/admin/backend-mode</code>
+  on the host laptop) -- it can detect its own address correctly, and gives
+  you a one-click link back to this exact page with the value already
+  filled in below.
 </p>
 
 <p style="color:var(--muted); font-size:13px;">
@@ -66,27 +59,6 @@
   your login session won't carry over: you'll need to enter that server's
   admin PIN again once you land there.
 </p>
-
-<script>
-  function detectLanIp() {
-    var status = document.getElementById('detect_status');
-    status.textContent = 'Detecting…';
-    fetch('/admin/api/detected-lan-ip')
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        document.getElementById('lan_api_base').value = data.suggested_url;
-        if (navigator.clipboard) {
-          navigator.clipboard.writeText(data.suggested_url).catch(function () {});
-          status.textContent = 'Detected ' + data.suggested_url + ' (copied to clipboard).';
-        } else {
-          status.textContent = 'Detected ' + data.suggested_url + '.';
-        }
-      })
-      .catch(function () {
-        status.textContent = 'Could not detect an IP -- enter it manually.';
-      });
-  }
-</script>
 
 <p style="color:var(--muted); font-size:13px;">
   Changing this mid-round will not migrate players already connected to the
@@ -117,8 +89,47 @@
     <p><span class="badge">UNKNOWN</span> Couldn't reach the cloud deployment just now to check -- expected if that's exactly why you switched to LAN (venue internet down). If you set this server as the active one, treat it as active.</p>
   {% endif %}
 
-  <p style="margin-top:16px;"><a href="{{ canonical_cloud_admin_url }}/admin/backend-mode">Open the cloud dashboard's Backend Mode page</a> to actually change which server is active (requires that dashboard's own login).</p>
+  <p style="margin-top:16px;">
+    <a id="cloud_link" href="{{ canonical_cloud_admin_url }}/admin/backend-mode">Open the cloud dashboard's Backend Mode page</a>
+    to actually change which server is active (requires that dashboard's own login).
+  </p>
+
+  <hr style="border-color:var(--border); margin:16px 0;">
+
+  <p style="color:var(--muted); font-size:13px;">
+    Unlike the cloud dashboard, <strong>this</strong> server can correctly
+    detect its own LAN address, since it's actually running on the LAN host
+    laptop.
+  </p>
+  <div style="display:flex; gap:8px; align-items:center;">
+    <button type="button" id="detect_btn" onclick="detectLanIp();">Detect this machine's IP</button>
+    <span id="detect_status" style="color:var(--muted); font-size:12px;"></span>
+  </div>
 </div>
+
+<script>
+  function detectLanIp() {
+    var status = document.getElementById('detect_status');
+    status.textContent = 'Detecting…';
+    fetch('/admin/api/detected-lan-ip')
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var cloudLink = document.getElementById('cloud_link');
+        var target = '{{ canonical_cloud_admin_url }}/admin/backend-mode?lan_api_base=' + encodeURIComponent(data.suggested_url);
+        cloudLink.href = target;
+        cloudLink.textContent = 'Open the cloud dashboard, prefilled with ' + data.suggested_url;
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(data.suggested_url).catch(function () {});
+          status.textContent = 'Detected ' + data.suggested_url + ' (copied to clipboard). Click the link above to carry it over.';
+        } else {
+          status.textContent = 'Detected ' + data.suggested_url + '. Click the link above to carry it over.';
+        }
+      })
+      .catch(function () {
+        status.textContent = 'Could not detect an IP -- enter it manually on the cloud dashboard.';
+      });
+  }
+</script>
 
 {% endif %}
 

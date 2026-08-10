@@ -271,13 +271,25 @@ def _normalize_url(url):
 
 
 @router.get("/backend-mode", response_class=HTMLResponse)
-def backend_mode_page(request: Request, db: Session = Depends(get_session), _=Depends(require_admin)):
+def backend_mode_page(
+    request: Request,
+    lan_api_base: str = "",
+    db: Session = Depends(get_session),
+    _=Depends(require_admin),
+):
     row = db.get(BackendMode, 1)
     if row is None:
         row = BackendMode()
         db.add(row)
         db.commit()
         db.refresh(row)
+
+    # Lets the LAN instance's own (correct) IP detection hand its result to
+    # this page via a link -- see the `else` branch of backend_mode.html,
+    # which builds `{canonical_cloud_admin_url}/admin/backend-mode?lan_api_base=...`
+    # after detecting locally. Only prefills the form; nothing is saved
+    # until the admin reviews it and clicks Save themselves.
+    prefill_lan_api_base = lan_api_base.strip() or None
 
     # Every server running this codebase has its OWN copy of this table --
     # but only the CANONICAL cloud deployment's row is ever actually
@@ -321,6 +333,7 @@ def backend_mode_page(request: Request, db: Session = Depends(get_session), _=De
             "this_base": this_base,
             "cloud_status": cloud_status,
             "canonical_cloud_admin_url": CANONICAL_CLOUD_ADMIN_URL,
+            "prefill_lan_api_base": prefill_lan_api_base,
         },
     )
 

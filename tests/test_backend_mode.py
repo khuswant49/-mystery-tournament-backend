@@ -97,8 +97,23 @@ def test_canonical_instance_shows_the_mode_toggle_form(client):
     resp = client.get("/admin/backend-mode")
     assert resp.status_code == 200
     assert 'name="mode"' in resp.text
-    assert "Detect this machine's IP" in resp.text
     assert "This is a LAN server instance" not in resp.text
+    # The canonical/cloud deployment can never correctly detect a LAN
+    # host's address (it would only find its own), so that button lives on
+    # the LAN instance's own page instead -- see
+    # test_non_canonical_instance_shows_a_working_detect_button below.
+    assert "Detect this machine's IP" not in resp.text
+
+
+def test_canonical_instance_prefills_lan_api_base_from_query_param(client):
+    # The LAN instance's own page links back here with ?lan_api_base=...
+    # once it detects its own (correct) address -- this only prefills the
+    # form for review, it must not save anything by itself.
+    client.post("/admin/login", data={"pin": "test-pin"})
+    resp = client.get("/admin/backend-mode?lan_api_base=http://192.168.1.77:8000")
+    assert resp.status_code == 200
+    assert 'value="http://192.168.1.77:8000"' in resp.text
+    assert client.get("/api/backend_mode").json()["mode"] == "cloud"
 
 
 def test_non_canonical_instance_reports_itself_active_when_cloud_agrees(client, monkeypatch):
@@ -153,6 +168,36 @@ def test_non_canonical_instance_flags_when_cloud_points_elsewhere(client, monkey
     resp = client.get("/admin/backend-mode")
     assert resp.status_code == 200
     assert "NOT ACTIVE" in resp.text
+
+
+def test_non_canonical_instance_shows_a_working_detect_button(client, monkeypatch):
+    # Unlike the canonical/cloud page, THIS server is actually running on
+    # whatever machine the admin is standing at -- so its own
+    # /admin/api/detected-lan-ip call is correct here, and the page should
+    # offer the button the canonical page deliberately omits.
+    import httpx
+
+    from app.routers import admin as admin_router
+
+    monkeypatch.setattr(admin_router, "CANONICAL_CLOUD_ADMIN_URL", "https://example-cloud.invalid")
+
+    class _FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"mode": "lan", "lan_api_base": "http://testserver"}
+
+    monkeypatch.setattr(httpx, "get", lambda *a, **k: _FakeResponse())
+
+    client.post("/admin/login", data={"pin": "test-pin"})
+    resp = client.get("/admin/backend-mode")
+    assert resp.status_code == 200
+    assert "Detect this machine's IP" in resp.text
+    assert "detected-lan-ip" in resp.text
+    # The detected value should be handed to the canonical dashboard via a
+    # link, not silently saved from this (non-authoritative) instance.
+    assert "example-cloud.invalid/admin/backend-mode?lan_api_base=" in resp.text
 
 
 def test_non_canonical_instance_handles_unreachable_cloud_gracefully(client, monkeypatch):
