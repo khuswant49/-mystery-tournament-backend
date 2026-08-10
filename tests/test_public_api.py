@@ -232,6 +232,6 @@ def test_car_assignment_matches_arrival_order_not_elapsed_time(client):
         )
 
     result_a = client.get(f"/api/entries/{entries[0]}/result").json()
-    assert result_a["car"]["label"] == "Car 1"
+    assert result_a["car"]["label"] == "Alpha"
     result_c = client.get(f"/api/entries/{entries[2]}/result").json()
-    assert result_c["car"]["label"] == "Car 3"
+    assert result_c["car"]["label"] == "Charlie"
