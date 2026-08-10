@@ -40,13 +40,21 @@ def _load_or_create_config(base_dir):
     if not config.get("COOKIE_SECRET"):
         config["COOKIE_SECRET"] = secrets.token_hex(32)
         changed = True
-
+    # Deliberately NOT auto-generated like the two above -- CAR_ADMIN_KEY has
+    # to match the CAR_ADMIN_KEY constant flashed into all 3 cars' firmware
+    # (esp32_car_wifi/car*/car*.ino), so a random per-install value would
+    # just break /admin/set-password instead of protecting anything. Leave
+    # it unset here and app.config.py's own CAR_ADMIN_KEY env var handling
+    # (or its placeholder default) applies -- add a CAR_ADMIN_KEY=... line
+    # to this file by hand to match your cars.
     if changed:
         with open(config_path, "w") as f:
             f.write("# Mystery Tournament LAN server config -- auto-generated on first run.\n")
             f.write("# Delete this file to get a fresh random PIN next time.\n")
             f.write("ADMIN_PIN={}\n".format(config["ADMIN_PIN"]))
             f.write("COOKIE_SECRET={}\n".format(config["COOKIE_SECRET"]))
+            if config.get("CAR_ADMIN_KEY"):
+                f.write("CAR_ADMIN_KEY={}\n".format(config["CAR_ADMIN_KEY"]))
 
     return config
 
@@ -70,6 +78,8 @@ def main():
     # os.environ at import time, not lazily.
     os.environ["ADMIN_PIN"] = config["ADMIN_PIN"]
     os.environ["COOKIE_SECRET"] = config["COOKIE_SECRET"]
+    if config.get("CAR_ADMIN_KEY"):
+        os.environ["CAR_ADMIN_KEY"] = config["CAR_ADMIN_KEY"]
     os.environ.setdefault("CORS_ORIGINS", "*")
     db_path = os.path.join(base_dir, "local.db").replace("\\", "/")
     os.environ["DATABASE_URL"] = "sqlite:///" + db_path
@@ -85,6 +95,10 @@ def main():
     print("=" * 64)
     print("Admin dashboard : http://{}:{}/admin/".format(ip, port))
     print("Admin PIN       : {}".format(config["ADMIN_PIN"]))
+    print("Car admin key   : {}".format(
+        "configured (from lan_server_config.txt)" if config.get("CAR_ADMIN_KEY")
+        else "NOT set -- using app/config.py's placeholder, car password pushes will fail to match real firmware"
+    ))
     print("Give this address to players' games and the cloud")
     print("dashboard's Backend Mode page:")
     print("    http://{}:{}".format(ip, port))

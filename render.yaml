@@ -25,6 +25,14 @@ services:
         sync: false
       - key: COOKIE_SECRET
         generateValue: true
+      # Must be set to the EXACT same value as the CAR_ADMIN_KEY constant
+      # flashed into all 3 cars' esp32_car_wifi/car*/car*.ino firmware --
+      # generateValue would produce a value that doesn't match, breaking
+      # /admin/set-password. Falls back to app/config.py's placeholder
+      # default if left unset here (see the security-review note that led
+      # to this being an env var instead of a code default).
+      - key: CAR_ADMIN_KEY
+        sync: false
       - key: CORS_ORIGINS
         value: "*"
       # Render defaults to the newest available Python (3.14 as of this
