@@ -56,12 +56,13 @@ def _seed_cars():
         existing = session.exec(select(Car)).all()
         if existing:
             return
-        for i in range(1, 4):
+        names = ["Alpha", "Bravo", "Charlie"]
+        for i, name in enumerate(names, start=1):
             session.add(
                 Car(
                     sort_order=i,
-                    label=f"Car {i}",
-                    wifi_ssid=f"MysteryCar{i}",
+                    label=name,
+                    wifi_ssid=name,
                     wifi_password="changeme123",
                     control_url="http://192.168.4.1",
                 )
