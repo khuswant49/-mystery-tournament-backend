@@ -1,66 +1,57 @@
-"""WebSocket endpoint the admin laptop's Bluetooth bridge connects OUT to.
+"""HTTP-polling endpoint the admin laptop's Bluetooth bridge polls.
 
-Players' phones reach the cloud backend over their own mobile data (not the
-venue WiFi), so this backend can never reach INTO the admin's laptop -- the
-laptop has to be the one holding an outbound connection instead, the
-standard reverse-relay pattern for controlling a device that sits behind
-NAT/a firewall/mobile hotspot with no public address of its own.
+Originally built as a WebSocket (the admin laptop holding an outbound
+connection to relay drive commands down to Bluetooth -- see
+project_context.md's "Phase 2 architecture pivot" for the full reasoning on
+why a laptop-side relay is required at all). Switched to plain HTTP polling
+after live testing showed Render's free-tier service (fronted by Cloudflare)
+does not pass through WebSocket upgrade handshakes at all -- confirmed with
+both a raw Python client and a real browser, both failing identically
+(connection reset before the handshake completes), which is a platform-level
+block, not something fixable from application code. Ordinary HTTPS requests
+through this same stack already work fine (every other endpoint here proves
+that), so polling sidesteps the problem entirely.
 
-Single-bridge model: there's exactly one admin laptop physically near the
-cars, so a newly-connecting bridge simply replaces whatever connection was
-there before (e.g. reconnecting after a WiFi blip) rather than juggling
-multiple registrations.
+Model: this module holds the LATEST desired left/right drive value per car
+in memory (not a queue of every command ever sent -- only the current state
+matters for continuous drive control, same as the ESP32 firmware itself only
+ever tracks "what should the motors be doing right now"). The bridge polls
+this every ~150-250ms and re-applies whatever it gets, for every car, every
+poll -- including cars nobody's currently driving (harmless: sending "0,0"
+to an already-stopped car is a no-op), which conveniently also satisfies the
+firmware's own IDLE_STOP_MS safety net without any special-casing.
 """
-import json
-from typing import Optional
+import time
+from typing import Dict, Tuple
 
-from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Query
 
 from app.config import CAR_ADMIN_KEY
 
 router = APIRouter()
 
-_bridge_ws: Optional[WebSocket] = None
+# car label -> (left, right) -- always the CURRENT desired state, not a queue.
+_car_state: Dict[str, Tuple[int, int]] = {}
+
+_last_poll_at: float = 0.0
+_BRIDGE_STALE_SECONDS = 3.0
 
 
 def is_bridge_connected() -> bool:
-    return _bridge_ws is not None
+    return _last_poll_at > 0 and (time.time() - _last_poll_at) < _BRIDGE_STALE_SECONDS
 
 
-async def send_drive_to_bridge(car_label: str, left: int, right: int) -> bool:
-    """Forwards a drive command to the connected bridge. Returns False if no
-    bridge is currently connected (admin laptop offline/crashed/not yet
-    started) so the HTTP layer can surface that distinctly from "your
-    session is invalid/expired"."""
-    global _bridge_ws
-    if _bridge_ws is None:
-        return False
-    try:
-        await _bridge_ws.send_text(json.dumps({"type": "drive", "car": car_label, "l": left, "r": right}))
-        return True
-    except Exception:
-        _bridge_ws = None
-        return False
+def set_drive_state(car_label: str, left: int, right: int) -> None:
+    """Called by car_control.py's /api/cars/{id}/drive -- just updates the
+    latest desired state; delivery happens whenever the bridge next polls."""
+    _car_state[car_label] = (left, right)
 
 
-@router.websocket("/bridge/ws")
-async def bridge_socket(websocket: WebSocket, key: str = Query(...)):
-    global _bridge_ws
-
+@router.get("/bridge/poll")
+def bridge_poll(key: str = Query(...)):
+    global _last_poll_at
     if key != CAR_ADMIN_KEY:
-        await websocket.close(code=4401)
-        return
+        raise HTTPException(status_code=403, detail="bad key")
 
-    await websocket.accept()
-    _bridge_ws = websocket
-    try:
-        while True:
-            # The bridge doesn't need to send us anything meaningful -- it just
-            # sends periodic heartbeat text so we have something to await, which
-            # is what lets us detect a disconnect via WebSocketDisconnect below.
-            await websocket.receive_text()
-    except WebSocketDisconnect:
-        pass
-    finally:
-        if _bridge_ws is websocket:
-            _bridge_ws = None
+    _last_poll_at = time.time()
+    return {"cars": {label: {"l": l, "r": r} for label, (l, r) in _car_state.items()}}

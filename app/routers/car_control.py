@@ -4,8 +4,9 @@ Replaces the old model where the ESP32 itself served this page over its own
 WiFi AP. The car has no WiFi and no web server anymore (see
 esp32_car_bluetooth/) -- this backend serves the control page, validates the
 session token server-side (the car firmware has zero access control of its
-own now), and relays drive commands to the admin laptop's Bluetooth bridge
-over the WebSocket in bridge.py.
+own now), and hands drive commands to the admin laptop's Bluetooth bridge via
+the polling model in bridge.py (not a WebSocket -- see that module's
+docstring for why).
 """
 from datetime import datetime
 
@@ -16,7 +17,7 @@ from sqlmodel import Session, select
 from app.config import CAR_DRIVE_WINDOW_SECONDS, CAR_TEST_PASSWORD
 from app.db import get_session
 from app.models import Car, CarTestSession, QrAward
-from app.routers.bridge import is_bridge_connected, send_drive_to_bridge
+from app.routers.bridge import is_bridge_connected, set_drive_state
 
 router = APIRouter()
 
@@ -211,15 +212,18 @@ def car_control_page(car_id: int, session: str, db: Session = Depends(get_sessio
 
 
 @router.get("/api/cars/{car_id}/drive")
-async def car_drive(car_id: int, session: str, l: int, r: int, db: Session = Depends(get_session)):
+def car_drive(car_id: int, session: str, l: int, r: int, db: Session = Depends(get_session)):
     car = db.get(Car, car_id)
     session_row = _find_session(db, car_id, session) if car is not None else None
     if car is None or session_row is None or _remaining_seconds(session_row) <= 0:
         raise HTTPException(status_code=403, detail="forbidden: missing, wrong, or expired session")
 
-    ok = await send_drive_to_bridge(car.label, l, r)
-    if not ok:
+    if not is_bridge_connected():
         raise HTTPException(status_code=503, detail="car link (admin laptop) is not connected right now")
+
+    # Always just records the latest desired state -- the bridge picks it up
+    # on its next poll (bridge.py), typically within ~150-250ms.
+    set_drive_state(car.label, l, r)
     return {"ok": True}
 
 
