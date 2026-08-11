@@ -9,6 +9,7 @@ the polling model in bridge.py (not a WebSocket -- see that module's
 docstring for why).
 """
 from datetime import datetime
+from typing import Dict, Tuple
 
 from fastapi import APIRouter, Depends, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -20,6 +21,18 @@ from app.models import Car, CarTestSession, QrAward
 from app.routers.bridge import is_bridge_connected, set_drive_state
 
 router = APIRouter()
+
+# A session's (car_id, created_at) never changes once granted, and a car's
+# label essentially never changes during an active 5-minute drive window --
+# caching both means every /drive call after the FIRST for a given session
+# skips the database entirely. Measured as a real, meaningful chunk of the
+# per-request latency budget on Render's free tier (shared/throttled CPU
+# makes every DB round-trip relatively expensive), and every millisecond
+# matters here since this is a live real-time control path, not a one-off
+# request. In-memory, per-process -- fine for the same reason bridge.py's
+# _car_state is (single web service instance, no need to survive a restart).
+_session_cache: Dict[Tuple[int, str], datetime] = {}
+_car_label_cache: Dict[int, str] = {}
 
 
 def _find_session(db: Session, car_id: int, session_token: str):
@@ -39,9 +52,38 @@ def _find_session(db: Session, car_id: int, session_token: str):
     ).first()
 
 
-def _remaining_seconds(session_row) -> float:
-    elapsed = (datetime.utcnow() - session_row.created_at).total_seconds()
+def _remaining_seconds_from(created_at: datetime) -> float:
+    elapsed = (datetime.utcnow() - created_at).total_seconds()
     return max(0.0, CAR_DRIVE_WINDOW_SECONDS - elapsed)
+
+
+def _cached_car_label(db: Session, car_id: int):
+    """Returns (label, car_exists). Hits the DB only on first lookup per
+    process for a given car_id -- there are only ever 3 cars and their
+    labels don't change mid-event, so this is safe to cache indefinitely."""
+    if car_id in _car_label_cache:
+        return _car_label_cache[car_id], True
+    car = db.get(Car, car_id)
+    if car is None:
+        return None, False
+    _car_label_cache[car_id] = car.label
+    return car.label, True
+
+
+def _cached_session_created_at(db: Session, car_id: int, session_token: str):
+    """Returns the session's created_at, or None if invalid. Hits the DB only
+    the first time a given (car_id, session_token) pair is seen -- a
+    session's identity/creation time never changes once granted, so caching
+    it is always correct, not just an approximation."""
+    cache_key = (car_id, session_token)
+    if cache_key in _session_cache:
+        return _session_cache[cache_key]
+
+    session_row = _find_session(db, car_id, session_token)
+    if session_row is None:
+        return None
+    _session_cache[cache_key] = session_row.created_at
+    return session_row.created_at
 
 
 # Same tank/twin-stick D-pad+Gears UI/JS already refined and bench-proven on
@@ -197,15 +239,15 @@ poll();
 
 @router.get("/car-control/{car_id}", response_class=HTMLResponse)
 def car_control_page(car_id: int, session: str, db: Session = Depends(get_session)):
-    car = db.get(Car, car_id)
-    if car is None:
+    label, exists = _cached_car_label(db, car_id)
+    if not exists:
         raise HTTPException(status_code=404, detail="car not found")
 
-    session_row = _find_session(db, car_id, session)
-    if session_row is None:
+    created_at = _cached_session_created_at(db, car_id, session)
+    if created_at is None:
         raise HTTPException(status_code=403, detail="invalid session")
 
-    page = CONTROL_PAGE_TEMPLATE.replace("%LABEL%", car.label)
+    page = CONTROL_PAGE_TEMPLATE.replace("%LABEL%", label)
     page = page.replace("%CAR_ID%", str(car_id))
     page = page.replace("%SESSION%", session)
     return HTMLResponse(page)
@@ -213,9 +255,13 @@ def car_control_page(car_id: int, session: str, db: Session = Depends(get_sessio
 
 @router.get("/api/cars/{car_id}/drive")
 def car_drive(car_id: int, session: str, l: int, r: int, db: Session = Depends(get_session)):
-    car = db.get(Car, car_id)
-    session_row = _find_session(db, car_id, session) if car is not None else None
-    if car is None or session_row is None or _remaining_seconds(session_row) <= 0:
+    # Hot path: after the first call for a given session, both lookups below
+    # are pure in-memory dict reads -- no database round-trip at all. See the
+    # cache docstring above for why that's always correct here, not just an
+    # optimization that risks staleness.
+    label, exists = _cached_car_label(db, car_id)
+    created_at = _cached_session_created_at(db, car_id, session) if exists else None
+    if not exists or created_at is None or _remaining_seconds_from(created_at) <= 0:
         raise HTTPException(status_code=403, detail="forbidden: missing, wrong, or expired session")
 
     if not is_bridge_connected():
@@ -223,17 +269,17 @@ def car_drive(car_id: int, session: str, l: int, r: int, db: Session = Depends(g
 
     # Always just records the latest desired state -- the bridge picks it up
     # on its next poll (bridge.py), typically within ~150-250ms.
-    set_drive_state(car.label, l, r)
+    set_drive_state(label, l, r)
     return {"ok": True}
 
 
 @router.get("/api/cars/{car_id}/status")
 def car_status(car_id: int, session: str, db: Session = Depends(get_session)):
-    session_row = _find_session(db, car_id, session)
-    if session_row is None:
+    created_at = _cached_session_created_at(db, car_id, session)
+    if created_at is None:
         return {"active": False, "remaining_seconds": 0, "bridge_connected": is_bridge_connected()}
 
-    remaining = _remaining_seconds(session_row)
+    remaining = _remaining_seconds_from(created_at)
     return {
         "active": remaining > 0,
         "remaining_seconds": int(remaining),
@@ -307,6 +353,11 @@ def car_test_access_submit(
     db.add(test_session)
     db.commit()
     db.refresh(test_session)
+
+    # Pre-warm the caches so even the FIRST /car-control page load and /drive
+    # call skip the database, not just subsequent ones.
+    _car_label_cache[car_id] = car.label
+    _session_cache[(car_id, test_session.session_token)] = test_session.created_at
 
     return RedirectResponse(
         url=f"/car-control/{car_id}?session={test_session.session_token}", status_code=303
