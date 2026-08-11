@@ -10,7 +10,7 @@ import app.db as db
 from app.config import CORS_ORIGINS
 from app.models import Car
 from app.resources import app_dir
-from app.routers import admin, public
+from app.routers import admin, bridge, car_control, public
 
 app = FastAPI(title="Mystery Tournament Admin & Game API")
 
@@ -38,6 +38,8 @@ app.add_middleware(
 
 app.include_router(public.router)
 app.include_router(admin.router)
+app.include_router(bridge.router)
+app.include_router(car_control.router)
 
 _static_dir = os.path.join(app_dir(), "static")
 if os.path.isdir(_static_dir):

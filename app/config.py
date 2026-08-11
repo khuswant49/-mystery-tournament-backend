@@ -37,6 +37,21 @@ DEFAULT_ROUND_TIMER_SECONDS = 420
 # How many correct finishers close a round and win car access.
 QUALIFYING_SLOTS = 3
 
+# Shared password for the /car-test-access page -- lets an admin pull up
+# ANY car's control page on demand without needing to actually win a round
+# (testing, rehearsal, live demos, or manually stepping in). Deliberately
+# separate from CAR_ADMIN_KEY (that one authenticates the physical bridge
+# laptop itself; this one is meant to be handed to a person). Change this
+# before the event -- same discipline as ADMIN_PIN/CAR_ADMIN_KEY.
+CAR_TEST_PASSWORD = os.environ.get("CAR_TEST_PASSWORD", "change-this-test-password")
+
+# How long a winner's session_token stays valid for driving, once the
+# admin-laptop Bluetooth bridge is reachable -- mirrors DRIVE_WINDOW_MS in
+# the (now-retired for this flow) WiFi-AP car firmware. Enforced here
+# server-side rather than on the car itself, since the Bluetooth cars have
+# no access-control logic of their own anymore (see esp32_car_bluetooth/).
+CAR_DRIVE_WINDOW_SECONDS = 5 * 60
+
 # Shared master secret the admin's own device presents to a car's local
 # /admin/set-password endpoint to push a freshly-rotated WiFi password (see
 # round_service.create_round's per-round rotation and

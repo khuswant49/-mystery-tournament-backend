@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
+from app.config import CANONICAL_CLOUD_ADMIN_URL
 from app.db import get_session
 from app.models import BackendMode, Entry, LobbyPresence, QrAward, Round, Car
 from app.schemas import (
@@ -155,7 +156,10 @@ def entry_result(entry_id: str, db: Session = Depends(get_session)):
             rank=award.rank,
             car=CarAward(
                 label=car.label,
-                control_url=car.control_url,
+                # Matches qr_service.award_entry()'s control_png_b64 exactly --
+                # always the public cloud URL (players drive over mobile data,
+                # not car.control_url, which is the retired WiFi-AP address).
+                control_url=f"{CANONICAL_CLOUD_ADMIN_URL}/car-control/{car.id}",
                 wifi_qr_png_b64=award.wifi_png_b64,
                 control_qr_png_b64=award.control_png_b64,
             ),

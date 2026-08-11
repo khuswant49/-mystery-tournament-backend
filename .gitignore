@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 .venv/
 local.db
+test_bridge*.db
 .env
 .pytest_cache/
 uvicorn.log

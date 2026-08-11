@@ -80,6 +80,22 @@ class BackendMode(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class CarTestSession(SQLModel, table=True):
+    """A car-control session granted by the shared CAR_TEST_PASSWORD instead
+    of by actually winning a round -- lets an admin/organizer pull up any
+    car's control page on demand (testing, rehearsal, a live demo, or
+    stepping in if something goes wrong), without needing a real QrAward.
+    Same 5-minute CAR_DRIVE_WINDOW_SECONDS window as a real award, enforced
+    the same way -- see car_control.py's _find_session()."""
+
+    __tablename__ = "car_test_sessions"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    car_id: int = Field(foreign_key="cars.id")
+    session_token: str = Field(default_factory=_uuid)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 class QrAward(SQLModel, table=True):
     __tablename__ = "qr_awards"
 

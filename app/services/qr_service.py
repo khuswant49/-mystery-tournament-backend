@@ -1,5 +1,6 @@
 from sqlmodel import Session, select
 
+from app.config import CANONICAL_CLOUD_ADMIN_URL
 from app.models import Car, QrAward
 from app.qr import control_qr_png_base64, wifi_qr_png_base64
 
@@ -25,9 +26,17 @@ def award_entry(db: Session, round_id: str, entry_id: str, rank: int) -> QrAward
         entry_id=entry_id,
         rank=rank,
         car_id=car.id,
+        # Still generated for backward compatibility with the WiFi-AP flow
+        # (esp32_car_wifi/), which is kept around as a fallback and not yet
+        # retired -- see project_context.md's "Phase 2 architecture pivot".
+        # Unused by the new Bluetooth-bridge control page below.
         wifi_png_b64=wifi_qr_png_base64(car.wifi_ssid, car.wifi_password),
     )
-    award.control_png_b64 = control_qr_png_base64(car.control_url, award.session_token)
+    # Always the public cloud URL, never a LAN address -- players control cars
+    # over their own mobile data, so this has to be reachable from anywhere,
+    # regardless of whatever mode Phase 1 gameplay itself is running in.
+    control_url = f"{CANONICAL_CLOUD_ADMIN_URL}/car-control/{car.id}"
+    award.control_png_b64 = control_qr_png_base64(control_url, award.session_token)
     db.add(award)
     db.commit()
     db.refresh(award)
