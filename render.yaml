@@ -33,6 +33,11 @@ services:
       # to this being an env var instead of a code default).
       - key: CAR_ADMIN_KEY
         sync: false
+      # Password for /car-test-access (backend/app/routers/car_control.py) --
+      # pulls up any car's control page without needing to win a round.
+      # Falls back to app/config.py's insecure placeholder if unset here.
+      - key: CAR_TEST_PASSWORD
+        sync: false
       - key: CORS_ORIGINS
         value: "*"
       # Render defaults to the newest available Python (3.14 as of this
