@@ -6,6 +6,7 @@ databases:
   # finishing mid-round could stall waiting for a sleeping instance to wake.
   - name: mystery-tournament-db
     plan: free
+    region: singapore  # closest Render region to India -- was unset (defaults to Oregon, US), which live-tested at a ~290-320ms per-request floor even with a reused connection, making Phase 2 car control unplayable
     databaseName: mystery_tournament
     user: mystery_tournament
 
@@ -14,6 +15,7 @@ services:
     name: mystery-tournament-backend
     runtime: python
     plan: free
+    region: singapore  # must match the database's region -- see note above
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
