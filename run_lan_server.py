@@ -55,6 +55,10 @@ def _load_or_create_config(base_dir):
             f.write("COOKIE_SECRET={}\n".format(config["COOKIE_SECRET"]))
             if config.get("CAR_ADMIN_KEY"):
                 f.write("CAR_ADMIN_KEY={}\n".format(config["CAR_ADMIN_KEY"]))
+            if config.get("CAR_TEST_PASSWORD"):
+                f.write("CAR_TEST_PASSWORD={}\n".format(config["CAR_TEST_PASSWORD"]))
+            if config.get("CANONICAL_CLOUD_ADMIN_URL"):
+                f.write("CANONICAL_CLOUD_ADMIN_URL={}\n".format(config["CANONICAL_CLOUD_ADMIN_URL"]))
 
     return config
 
@@ -80,6 +84,16 @@ def main():
     os.environ["COOKIE_SECRET"] = config["COOKIE_SECRET"]
     if config.get("CAR_ADMIN_KEY"):
         os.environ["CAR_ADMIN_KEY"] = config["CAR_ADMIN_KEY"]
+    if config.get("CAR_TEST_PASSWORD"):
+        os.environ["CAR_TEST_PASSWORD"] = config["CAR_TEST_PASSWORD"]
+    if config.get("CANONICAL_CLOUD_ADMIN_URL"):
+        # Matters once this server sits behind a tunnel (e.g. cloudflared) --
+        # QR/control-link generation (qr_service.py, routers/public.py) uses
+        # this to build a URL players can actually reach, not a private LAN
+        # address. Without it, this server would still generate links
+        # pointing at whatever the code default is (the Render deployment),
+        # which is wrong once THIS server is the one issuing the awards.
+        os.environ["CANONICAL_CLOUD_ADMIN_URL"] = config["CANONICAL_CLOUD_ADMIN_URL"]
     os.environ.setdefault("CORS_ORIGINS", "*")
     db_path = os.path.join(base_dir, "local.db").replace("\\", "/")
     os.environ["DATABASE_URL"] = "sqlite:///" + db_path
@@ -98,6 +112,13 @@ def main():
     print("Car admin key   : {}".format(
         "configured (from lan_server_config.txt)" if config.get("CAR_ADMIN_KEY")
         else "NOT set -- using app/config.py's placeholder, car password pushes will fail to match real firmware"
+    ))
+    print("Car test pass   : {}".format(
+        "configured" if config.get("CAR_TEST_PASSWORD") else "NOT set -- using app/config.py's insecure placeholder"
+    ))
+    print("Canonical URL   : {}".format(
+        config.get("CANONICAL_CLOUD_ADMIN_URL")
+        or "NOT set -- QR/control links will point at the Render deployment, not this server"
     ))
     print("Give this address to players' games and the cloud")
     print("dashboard's Backend Mode page:")
