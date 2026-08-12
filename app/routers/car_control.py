@@ -4,9 +4,8 @@ Replaces the old model where the ESP32 itself served this page over its own
 WiFi AP. The car has no WiFi and no web server anymore (see
 esp32_car_bluetooth/) -- this backend serves the control page, validates the
 session token server-side (the car firmware has zero access control of its
-own now), and hands drive commands to the admin laptop's Bluetooth bridge via
-the polling model in bridge.py (not a WebSocket -- see that module's
-docstring for why).
+own now), and pushes drive commands to the admin laptop's Bluetooth bridge
+over the WebSocket in bridge.py.
 """
 from datetime import datetime
 from typing import Dict, Tuple
@@ -18,7 +17,7 @@ from sqlmodel import Session, select
 from app.config import CAR_DRIVE_WINDOW_SECONDS, CAR_TEST_PASSWORD
 from app.db import get_session
 from app.models import Car, CarTestSession, QrAward
-from app.routers.bridge import is_bridge_connected, set_drive_state
+from app.routers.bridge import is_bridge_connected, send_drive_to_bridge
 from app.services.qr_service import is_latest_session, register_active_session
 
 router = APIRouter()
@@ -267,7 +266,7 @@ def car_control_page(car_id: int, session: str, db: Session = Depends(get_sessio
 
 
 @router.get("/api/cars/{car_id}/drive")
-def car_drive(car_id: int, session: str, l: int, r: int, db: Session = Depends(get_session)):
+async def car_drive(car_id: int, session: str, l: int, r: int, db: Session = Depends(get_session)):
     # Hot path: after the first call for a given session, both lookups below
     # are pure in-memory dict reads -- no database round-trip at all. See the
     # cache docstring above for why that's always correct here, not just an
@@ -277,12 +276,9 @@ def car_drive(car_id: int, session: str, l: int, r: int, db: Session = Depends(g
     if not exists or created_at is None or _remaining_seconds_from(created_at) <= 0:
         raise HTTPException(status_code=403, detail="forbidden: missing, wrong, or expired session")
 
-    if not is_bridge_connected():
+    ok = await send_drive_to_bridge(label, l, r)
+    if not ok:
         raise HTTPException(status_code=503, detail="car link (admin laptop) is not connected right now")
-
-    # Always just records the latest desired state -- the bridge picks it up
-    # on its next poll (bridge.py), typically within ~150-250ms.
-    set_drive_state(label, l, r)
     return {"ok": True}
 
 
