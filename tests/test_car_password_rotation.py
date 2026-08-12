@@ -36,17 +36,6 @@ def test_generated_car_passwords_are_wifi_safe_length():
         assert not any(c in pw for c in "0O1lI")
 
 
-def test_round_detail_page_shows_a_sync_link_per_car(client):
-    client.post("/admin/login", data={"pin": "test-pin"})
-    start_resp = client.post("/admin/rounds", data={"scenario_id": "SC01"}, follow_redirects=False)
-    round_url = start_resp.headers["location"]
-
-    resp = client.get(round_url)
-    assert resp.status_code == 200
-    assert "Sync Car WiFi Passwords" in resp.text
-    assert resp.text.count("Push link") == 3
-
-
 def test_starting_a_round_redirects_straight_to_its_own_detail_page(client):
     client.post("/admin/login", data={"pin": "test-pin"})
     resp = client.post("/admin/rounds", data={"scenario_id": "SC01"}, follow_redirects=False)

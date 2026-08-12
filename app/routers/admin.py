@@ -10,7 +10,7 @@ from sqlmodel import Session, select
 
 import datetime as _dt
 
-from app.config import CANONICAL_CLOUD_ADMIN_URL, CAR_ADMIN_KEY, SCENARIO_CATALOGUE
+from app.config import CANONICAL_CLOUD_ADMIN_URL, SCENARIO_CATALOGUE
 from app.db import get_session
 from app.models import BackendMode, Car, Entry, LobbyPresence, QrAward, Round
 from app.resources import app_dir
@@ -105,26 +105,6 @@ def rounds_table_partial(request: Request, db: Session = Depends(get_session), _
     return templates.TemplateResponse("_rounds_table.html", {"request": request, "rounds": rounds})
 
 
-def _car_sync_links(db: Session) -> list:
-    """For each car, the URL (and matching QR) the admin's own device opens
-    while connected to that car's CURRENT WiFi to push its freshly-rotated
-    password (see round_service._rotate_car_passwords). Not shown to game
-    clients -- admin-only, and only meaningful right after a round starts,
-    since that's the only time the password actually changes."""
-    from urllib.parse import quote
-
-    from app.qr import png_base64
-
-    cars = db.exec(select(Car).order_by(Car.sort_order.asc())).all()
-    links = []
-    for car in cars:
-        push_url = "{}/admin/set-password?key={}&password={}".format(
-            car.control_url, quote(CAR_ADMIN_KEY), quote(car.wifi_password)
-        )
-        links.append({"car": car, "push_url": push_url, "push_qr_b64": png_base64(push_url)})
-    return links
-
-
 def _build_round_detail_context(request: Request, round_id: str, db: Session) -> dict:
     round_ = db.get(Round, round_id)
     if round_ is None:
@@ -161,7 +141,6 @@ def _build_round_detail_context(request: Request, round_id: str, db: Session) ->
         "dnf": dnf,
         "pending": pending,
         "awards_by_entry": awards_by_entry,
-        "car_sync_links": _car_sync_links(db),
     }
 
 
