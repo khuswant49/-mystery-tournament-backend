@@ -27,7 +27,6 @@
         {% if aw %}
           {{ aw[1].label }}
           <div class="qr-pair" style="margin-top:8px;">
-            <div><small>WiFi</small><br><img src="data:image/png;base64,{{ aw[0].wifi_png_b64 }}"></div>
             <div><small>Control</small><br><img src="data:image/png;base64,{{ aw[0].control_png_b64 }}"></div>
           </div>
         {% elif round.status == "in_progress" %}
