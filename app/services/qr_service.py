@@ -1,8 +1,30 @@
+from typing import Dict
+
 from sqlmodel import Session, select
 
 from app.config import CANONICAL_CLOUD_ADMIN_URL
 from app.models import Car, QrAward
 from app.qr import control_qr_png_base64, wifi_qr_png_base64
+
+# car_id -> the ONE currently-valid session_token for that car, across both
+# real awards and password-granted test sessions (car_control.py). Whichever
+# session was granted MOST RECENTLY for a given car is the only one that can
+# still drive it -- registering a new one immediately invalidates whatever
+# was active before, even if that earlier session's own 5-minute window
+# hasn't run out yet. Without this, a previous round's winner whose control
+# page is still open could keep fighting a brand-new winner for control of
+# the same physical car. In-memory/per-process, same lifetime as bridge.py's
+# _car_state -- fine for the same reason (single web service instance, no
+# need to survive a restart, and sessions are short-lived anyway).
+_latest_session_per_car: Dict[int, str] = {}
+
+
+def register_active_session(car_id: int, session_token: str) -> None:
+    _latest_session_per_car[car_id] = session_token
+
+
+def is_latest_session(car_id: int, session_token: str) -> bool:
+    return _latest_session_per_car.get(car_id) == session_token
 
 
 def award_count(db: Session, round_id: str) -> int:
@@ -40,4 +62,5 @@ def award_entry(db: Session, round_id: str, entry_id: str, rank: int) -> QrAward
     db.add(award)
     db.commit()
     db.refresh(award)
+    register_active_session(car.id, award.session_token)
     return award

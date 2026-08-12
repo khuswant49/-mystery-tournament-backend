@@ -19,6 +19,7 @@ from app.config import CAR_DRIVE_WINDOW_SECONDS, CAR_TEST_PASSWORD
 from app.db import get_session
 from app.models import Car, CarTestSession, QrAward
 from app.routers.bridge import is_bridge_connected, set_drive_state
+from app.services.qr_service import is_latest_session, register_active_session
 
 router = APIRouter()
 
@@ -84,6 +85,18 @@ def _cached_session_created_at(db: Session, car_id: int, session_token: str):
         return None
     _session_cache[cache_key] = session_row.created_at
     return session_row.created_at
+
+
+def _valid_session_created_at(db: Session, car_id: int, session_token: str):
+    """Like _cached_session_created_at, but also rejects a token that's been
+    superseded -- checked fresh every call (never cached), since "is this
+    still the latest" changes over time in a way a real session's own
+    created_at never does. This is what stops a previous winner's
+    still-open control page from fighting a brand-new winner over the same
+    physical car (see qr_service.register_active_session)."""
+    if not is_latest_session(car_id, session_token):
+        return None
+    return _cached_session_created_at(db, car_id, session_token)
 
 
 # Same tank/twin-stick D-pad+Gears UI/JS already refined and bench-proven on
@@ -243,7 +256,7 @@ def car_control_page(car_id: int, session: str, db: Session = Depends(get_sessio
     if not exists:
         raise HTTPException(status_code=404, detail="car not found")
 
-    created_at = _cached_session_created_at(db, car_id, session)
+    created_at = _valid_session_created_at(db, car_id, session)
     if created_at is None:
         raise HTTPException(status_code=403, detail="invalid session")
 
@@ -260,7 +273,7 @@ def car_drive(car_id: int, session: str, l: int, r: int, db: Session = Depends(g
     # cache docstring above for why that's always correct here, not just an
     # optimization that risks staleness.
     label, exists = _cached_car_label(db, car_id)
-    created_at = _cached_session_created_at(db, car_id, session) if exists else None
+    created_at = _valid_session_created_at(db, car_id, session) if exists else None
     if not exists or created_at is None or _remaining_seconds_from(created_at) <= 0:
         raise HTTPException(status_code=403, detail="forbidden: missing, wrong, or expired session")
 
@@ -275,7 +288,7 @@ def car_drive(car_id: int, session: str, l: int, r: int, db: Session = Depends(g
 
 @router.get("/api/cars/{car_id}/status")
 def car_status(car_id: int, session: str, db: Session = Depends(get_session)):
-    created_at = _cached_session_created_at(db, car_id, session)
+    created_at = _valid_session_created_at(db, car_id, session)
     if created_at is None:
         return {"active": False, "remaining_seconds": 0, "bridge_connected": is_bridge_connected()}
 
@@ -358,6 +371,7 @@ def car_test_access_submit(
     # call skip the database, not just subsequent ones.
     _car_label_cache[car_id] = car.label
     _session_cache[(car_id, test_session.session_token)] = test_session.created_at
+    register_active_session(car_id, test_session.session_token)
 
     return RedirectResponse(
         url=f"/car-control/{car_id}?session={test_session.session_token}", status_code=303
